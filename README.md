@@ -19,9 +19,9 @@ RDD is possible with ISSP data as people were interviewed both before and after 
 
 ### DiD
 
-With DiD is a more powerful identification strategy, however it assumes stable trends accross countries as well as homogenous effects of covariates in all countries.
+DiD is a more powerful identification strategy, however it assumes stable trends accross countries as well as homogenous effects of covariates in all countries.
 
 Result
 ----------
 
-We find the Fukushima-effect. Moreover we can show, that womens attitudes were affected significantly stronger than mens. The FUkushima-effect is furthermore higher for older individuals who tended to be more optimistic with nuclear energy and now converge towards their younger counterparts.
+We find the Fukushima-effect. Moreover we can show, that women attitudes were affected significantly stronger than men. The Fukushima-effect is furthermore higher for older individuals who tended to be more optimistic with nuclear energy and now converge towards their younger counterparts.
