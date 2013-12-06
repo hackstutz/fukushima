@@ -1,10 +1,10 @@
-# Fukushima-Effect Analyses
+# Measuring and analysing the causal impact of the Fukushima Daiichi nuclear disaster
 
 ## Data
 
-Data needs to be downloaded from ZACAT <http://zacat.gesis.org/webview/>.
+We use the International Social Survey Program (ISSP) data 2010 which added an environmental attitudes survey as a survey focus. The survey was conducted between 2010 and 2011 whereby the exact period varies by country. Data needs to be downloaded from ZACAT <http://zacat.gesis.org/webview/>.
 
-```{dataimport}
+```{r dataimport}
 library(foreign)
 setwd("C:/Users/Hackstutz/Dropbox/Fukushima/")
 issp <- read.dta("issp_data/ZA5500_v2-0-0.dta")
@@ -12,10 +12,75 @@ issp <- read.dta("issp_data/ZA5500_v2-0-0.dta")
 
 For a few countries we have information about the month the interview took place but not the exact day. We suggest to impute these information using random uniform distributions.
 
-```{datapreperation}
+```{r datapreperation}
 #random.org
 set.seed(950075)
 
+#issp$DATEDY[is.na(issp$DATEDY)]<-round(runif(1, 0.5,30.5))
+#replace DATEDY = 1+(31-1)*runiform() if DATEDY==.n & inlist(DATEMO,1,3,5,7,8,10,12)
+#replace DATEDY = 1+(28-1)*runiform() if DATEDY==.n & DATEMO==2
+#replace DATEDY = 1+(30-1)*runiform() if DATEDY==.n & inlist(DATEMO,4,6,9,11)
 
+```
+
+It is important to know which countries contribute information to which period of time.
+
+```{r timelines}
+library(ggplot2)
+countries <- c("Germany","Germany", "France","France", "Denmark","Denmark", "Switzerland", "Switzerland","Italy","Italy")
+dates <- c("2010-03-03","2010-09-03","2010-09-23","2011-05-13","2010-02-23","2011-04-13","2010-04-01","2010-05-13","2010-07-03","2011-01-03")
+daten <- data.frame(countries, dates)
+qplot(dates,countries, data=daten,group=countries)+geom_line()+ggtitle("Example-Plot with Fake data")
+```
+
+## Method
+
+### Regression Discontinuity Design (RDD)
+
+RDD's causal identification strategy is to compare cases which are very close to a certain cutoff point of threshold which assigns data into a control and treatment group. Concerning the Fukushima accident, the assignment variable is time and the threshold is the day of the accident: 13th March 2011. Whether the interview was conducted before the 13th or after appears to be random so comparing individuals surveyed just before and just after the accident does control for most unobserved heterogeneity. RDD is illustrated in the following figure:
+
+```{r rddillustration}
+library(ggplot2)
+library(grid) #for function arrow()
+x<-1:100
+set.seed(123)
+y<-rnorm(100)
+y[50:100]<-y[50:100]+2
+group<-c(rep(0,50),rep(1,50))
+qplot(x,y,group=group) + stat_smooth(se=FALSE)+geom_text(show_guide=FALSE,x=50,y=1.2,label="Treatment \neffect",color="black")+geom_segment(aes(x = 50, y = 1.5, xend = 50, yend = 2.2), arrow = arrow(),color="black")+geom_segment(aes(x = 50, y = 0.8, xend = 50, yend = 0.45), arrow = arrow(),color="black")+ggtitle("RDD Visualization")+theme_bw()
+```
+
+### Difference-in-Difference Estimator (DiD)
+
+DiD's causal identification strategy is to get rid of multiple sources of unobserved heterogeneity by controlling for country-characteristics (country dummies) and period-characteristics (period dummies) which in our case is accomplished by estimating a Country-Fixed-Effects Modell including a "before/after-Fukushima-Dummy". There are two key assumptions to mention. First, DiD assumes the timetrend of $y$, i.e. attitudes towards nuclear energy to be stable over time. Second, as there are countries which are completely before or completely after the accident, the covariance of all variables needs to be stable accross countries. (das müssen wir noch diskutieren). DiD is illustrated in the next figure:
+
+```{r didillustration}
+time <- rep(c(0,1),3)
+observed <- c(30,15)
+control <- c(20,35)
+counterfactual <- c(30,45)
+group <- factor(c(1,1,2,2,3,3), labels=c("observed","control","counterfactual"))
+y <- c(observed, control, counterfactual)
+qplot(time,y,group=group, colour=group,ylim=c(0,50),xlim=c(0,1.06))+geom_line(size=1)+ggtitle("DiD Visualization")+geom_segment(aes(x = 1, y = 27, xend = 1, yend = 15.5), arrow = arrow(),color="black")+geom_segment(aes(x = 1, y = 33, xend = 1, yend = 44.5), arrow = arrow(),color="black")+geom_text(show_guide=FALSE,x=1,y=30,label="Treatment \neffect",color="black")+theme_bw()
+```
+
+
+## Models
+
+### RDD
+
+```{r rdd,eval=FALSE}
+library(rdd)
+# Efficiency gains can be made by including covariates. I.e. country dummies. Good to think about a lot more...
+RDestimate(y~x|cov, cutpoint=fukushimadatu,)
+plot(RDestimate(y~x|cov))
+```
+
+### DiD
+
+```{r did,eval=FALSE}
+# We need ordered logit regression here. Fixed effects can be achieved by including country-dummies.
+library(MASS)
+polr(y~after+country, data=issp)
 ```
 
