@@ -24,4 +24,4 @@ DiD is a more powerful identification strategy, however it assumes stable trends
 Result
 ----------
 
-We find the Fukushima-effect. Moreover we can show, that women attitudes were affected significantly stronger than men. The Fukushima-effect is furthermore higher for older individuals who tended to be more optimistic with nuclear energy and now converge towards their younger counterparts.
+We find the Fukushima-effect. Moreover we can show, that women were affected significantly stronger than men. The Fukushima-effect is furthermore higher for older individuals who tended to be more optimistic with nuclear energy and now converge towards their younger counterparts.
