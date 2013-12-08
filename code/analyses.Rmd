@@ -36,8 +36,20 @@ issp$datestring <- paste(issp$DATEYR,issp$DATEMO,issp$DATEDY,sep="-")
 # Change the locale to apply strptime with english names for months
 Sys.setlocale("LC_TIME","us")
 issp$date <- strptime(issp$datestring,format="%Y-%B-%d")
-issp$V4[is.na(issp$date)] #6471 Missings
+#issp$V4[is.na(issp$date)] #6471 Missings
                               
+# dependent variable
+issp$nuclear <- issp$V45
+issp$nuclear[issp$nuclear%in%c("Can't choose","NA")] <- NA
+issp$nuclear <- factor(issp$nuclear)
+
+# independent variable: before/after fukushima
+issp$after <- issp$date >= fukushima
+
+# controls
+issp$country <- issp$V4
+issp$sex <- factor(issp$SEX)
+issp$age <- issp$AGE
 ```
 
 It is important to know which countries contribute information to which period of time.
@@ -87,8 +99,9 @@ qplot(time,y,group=group, colour=group,ylim=c(0,50),xlim=c(0,1.06))+geom_line(si
 ```{r rdd,eval=FALSE}
 library(rdd)
 # Efficiency gains can be made by including covariates. I.e. country dummies. Good to think about a lot more...
-RDestimate(y~x|cov, cutpoint=fukushimadatu,)
-plot(RDestimate(y~x|cov))
+# not yet working. bandwidth too small
+#RDestimate(V45~as.numeric(date), cutpoint=as.numeric(fukushima),data=issp)
+#plot(RDestimate(y~x|cov))
 ```
 
 ### DiD
@@ -96,6 +109,13 @@ plot(RDestimate(y~x|cov))
 ```{r did,eval=FALSE}
 # We need ordered logit regression here. Fixed effects can be achieved by including country-dummies.
 library(MASS)
-polr(y~after+country, data=issp)
+# including country dummies in polr() throws an error.. 
+#summary(polr(nuclear~after*(sex+age), data=issp))
+
+# using OLS temporarily
+# controlling for country trends
+summary(lm(as.numeric(nuclear)~after*(sex+age)+country+country:as.numeric(date), data=issp))
+summary(lm(as.numeric(nuclear)~after*(sex+age)+country, data=issp))
+
 ```
 
