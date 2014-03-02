@@ -114,8 +114,13 @@ library(MASS)
 
 # using OLS temporarily
 # controlling for country trends
-summary(lm(as.numeric(nuclear)~after*(sex+age)+country+country:as.numeric(date), data=issp))
+summary(lm(as.numeric(nuclear)~sex+age+after:sex+after:age+country+country:as.numeric(date), data=issp))
 summary(lm(as.numeric(nuclear)~after*(sex+age)+country, data=issp))
-
+summary(lm(as.numeric(nuclear)~after*(sex+age+DEGREE)+country, data=issp))
+fit<-lm(as.numeric(nuclear)~after*(sex+age+DEGREE)+country, data=issp)
+# controlling for educational degree changes age-coefficient. so age effect seems to be an effect of education
+# i.e. higher educations tend to higher values (=not a big threat), at the same time, older people have lower education
+library(survey)# contains regTermTest for F-test
+regTermTest(fit,"after:DEGREE") #no interaction with education
 ```
 
