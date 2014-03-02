@@ -44,6 +44,7 @@ issp$nuclear[issp$nuclear%in%c("Can't choose","NA")] <- NA
 issp$nuclear <- factor(issp$nuclear)
 
 # independent variable: before/after fukushima
+fukushima <- strptime("2011-03-13",format="%Y-%m-%d")
 issp$after <- issp$date >= fukushima
 
 # controls
@@ -56,7 +57,7 @@ It is important to know which countries contribute information to which period o
 
 ```{r timelines}
 library(ggplot2)
-fukushima <- strptime("2011-03-13",format="%Y-%m-%d")
+
 ggplot(issp, aes(x=date,y=V4))+geom_point()+geom_vline(xintercept=as.numeric(fukushima),color="red")
 ```
 
@@ -110,17 +111,45 @@ library(rdd)
 # We need ordered logit regression here. Fixed effects can be achieved by including country-dummies.
 library(MASS)
 # including country dummies in polr() throws an error.. 
-#summary(polr(nuclear~after*(sex+age), data=issp))
+summary(polr(nuclear~after*(sex+age), data=issp))
 
 # using OLS temporarily
 # controlling for country trends
-summary(lm(as.numeric(nuclear)~sex+age+after:sex+after:age+country+country:as.numeric(date), data=issp))
+fit<-lm(as.numeric(nuclear)~sex+age+after:sex+after:age+country+country:as.numeric(date), data=issp)
+summary(fit)
+library(survey)# contains regTermTest for F-test
+
 summary(lm(as.numeric(nuclear)~after*(sex+age)+country, data=issp))
 summary(lm(as.numeric(nuclear)~after*(sex+age+DEGREE)+country, data=issp))
 fit<-lm(as.numeric(nuclear)~after*(sex+age+DEGREE)+country, data=issp)
 # controlling for educational degree changes age-coefficient. so age effect seems to be an effect of education
 # i.e. higher educations tend to higher values (=not a big threat), at the same time, older people have lower education
-library(survey)# contains regTermTest for F-test
+
 regTermTest(fit,"after:DEGREE") #no interaction with education
+#library(effects)
+#plot(effect("after*age",fit))
+```
+
+### Methodological issues
+
+Interaction effects might be "compressed", e.g. women have a lower base-line (more often answered "extremely dangerous") so there is less room for an effect. We can look whether ordered logit solves that issue by using simulated data.
+
+```{r}
+woman <- rbinom(36342,1,0.5)
+# introduce an effect for sex (-0.33) and after (-0.21) but no interaction
+y_star <- woman*-0.33+rnorm(36342)
+#retrieve cut-off-points
+q20<-quantile(y_star,0.2)
+q40<-quantile(y_star,0.4)
+q60<-quantile(y_star,0.6)
+q80<-quantile(y_star,0.8)
+# introduce the fukushima effect
+after <- rbinom(36342,1,0.5)
+y_star <- y_star-0.21*after
+y <- ifelse(y_star<q20,1,ifelse(y_star<q40,2,ifelse(y_star<q60,3,ifelse(y_star<q80,4,5))))
+summary(lm(y~woman*after))
+summary(polr(as.factor(y)~woman*after))
+
+# we see a bias if we use -2 for women (so there must be an extreme base line difference for this artefact to occure). ologit solves the problem!
 ```
 
