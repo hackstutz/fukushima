@@ -1,5 +1,11 @@
 # Measuring and analysing the causal impact of the Fukushima Daiichi nuclear disaster
 
+```{r sweaveopts}
+library(knitr)
+opts_chunk$set(comment=NA, fig.width=8, fig.height=6)
+```
+
+
 ## Data
 
 We use the International Social Survey Program (ISSP) data 2010 which added an environmental attitudes survey as a survey focus. The survey was conducted between 2010 and 2011 whereby the exact period varies by country. Data needs to be downloaded from ZACAT <http://zacat.gesis.org/webview/>.
@@ -7,6 +13,7 @@ We use the International Social Survey Program (ISSP) data 2010 which added an e
 ```{r dataimport}
 library(foreign)
 setwd("C:/Users/Hackstutz/Dropbox/Fukushima/")
+setwd("C:/Users/rudi/Dropbox/Fukushima/")
 issp <- read.dta("issp_data/ZA5500_v2-0-0.dta")
 ```
 
@@ -39,7 +46,7 @@ issp$date <- strptime(issp$datestring,format="%Y-%B-%d")
 #issp$V4[is.na(issp$date)] #6471 Missings
                               
 # dependent variable
-issp$nuclear <- issp$V45
+issp$nuclear <- 5-as.numeric(issp$V45)
 issp$nuclear[issp$nuclear%in%c("Can't choose","NA")] <- NA
 issp$nuclear <- factor(issp$nuclear)
 
@@ -50,7 +57,12 @@ issp$after <- issp$date >= fukushima
 # controls
 issp$country <- issp$V4
 issp$sex <- factor(issp$SEX)
-issp$age <- issp$AGE
+issp$age <- issp$AGE/10
+issp$old <- issp$age>4.7
+issp$educated <- issp$DEGREE%in%c("University degree completed, BG: lower tertiary level, upper tertiary level","University degree incomplete (qualifications above higher secondary level)","Higher secondary completed (usual entry requirements for universities)")
+#issp$income <- issp$
+issp$trust <- as.numeric(issp$V11)+as.numeric(issp$V12)
+issp$pol_trust <-5-as.numeric(issp$V13)
 ```
 
 It is important to know which countries contribute information to which period of time.
@@ -97,44 +109,92 @@ qplot(time,y,group=group, colour=group,ylim=c(0,50),xlim=c(0,1.06))+geom_line(si
 
 ### RDD
 
+```{r parametric}
+issp$t <- as.numeric(issp$date)-as.numeric(fukushima)
+fit_rd_param<-lm(as.numeric(nuclear)~after*(sex+old+educated)*(t+I(t^2)+I(t^3)+I(t^4)+I(t^5)+I(t^6)), data=subset(issp,valid==TRUE))
+# interaction is significant for sex but not for old or educated
+rd_data <- model.frame(fit_rd_param)
+rd_data$pred <- predict(fit_rd_param)
+ggplot(rd_data, aes(y=pred,x=t))+geom_point()+facet_wrap(~sex)
+ggplot(rd_data, aes(y=pred,x=t))+geom_point()+facet_wrap(~old)
+ggplot(rd_data, aes(y=pred,x=t))+geom_point()+facet_wrap(~educated)
+```
+
+
 ```{r rdd,eval=FALSE}
 library(rdd)
-# Efficiency gains can be made by including covariates. I.e. country dummies. Good to think about a lot more...
-# not yet working. bandwidth too small
-#RDestimate(V45~as.numeric(date), cutpoint=as.numeric(fukushima),data=issp)
-#plot(RDestimate(y~x|cov))
+# Efficiency gains can be made by including covariates. I.e. country dummies. Austin Nicols stronly discourages that.
+#RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=issp)
+bw <- 86400*c(14,30,60,90) #86400 equals 1 day
+
+# Exlude imputated Canadians:
+issp$valid <- TRUE
+issp$valid[issp$country=="CA-Canada"& issp$DATEMO=="March"] <- FALSE
+
+fit_rd<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,valid==TRUE),bw=bw[2])
+
+par(mfrow=c(1,1))
+plot(fit_rd)
+
+# Split by Sex
+fit_rd_male<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,sex=="Male"&valid==TRUE),bw=bw[2])
+fit_rd_female<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,sex=="Female"&valid==TRUE),bw=bw[2])
+
+par(mfrow=c(1,2))
+plot(fit_rd_male)
+title("Effect for Males")
+plot(fit_rd_female)
+title("Effect for Females")
+
+# Split by Age (old means >47 years)
+fit_rd_young<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,old==FALSE&valid==TRUE),bw=bw[2])
+fit_rd_old<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,old==TRUE&valid==TRUE),bw=bw[2])
+
+par(mfrow=c(1,2))
+plot(fit_rd_young)
+title("Effect for young people")
+plot(fit_rd_old)
+title("Effect for old people (>47y)")
+
+# Split by education (qualified to enter university and higher)
+fit_rd_uneduc<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,educated==FALSE&valid==TRUE),bw=bw[2])
+fit_rd_educ<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,educated==TRUE&valid==TRUE),bw=bw[2])
+
+par(mfrow=c(1,2))
+plot(fit_rd_uneduc)
+title("Effect for less educated")
+plot(fit_rd_educ)
+title("Effect for more educated")
+
+# Table with all effects
+betas30 <- c(fit_rd$est[1], fit_rd_male$est[1],fit_rd_female$est[1],fit_rd_young$est[1],fit_rd_old$est[1],fit_rd_uneduc$est[1],fit_rd_educ$est[1])
+betas60 <- c(fit_rd$est[3], fit_rd_male$est[3],fit_rd_female$est[3],fit_rd_young$est[3],fit_rd_old$est[3],fit_rd_uneduc$est[3],fit_rd_educ$est[3])
+coefnames <- c("Overall", "Males","Females","Young","Old","Less educated","More educated")
+se30 <-  c(fit_rd$se[1], fit_rd_male$se[1],fit_rd_female$se[1],fit_rd_young$se[1],fit_rd_old$se[1],fit_rd_uneduc$se[1],fit_rd_educ$se[1])
+se60 <-  c(fit_rd$se[3], fit_rd_male$se[3],fit_rd_female$se[3],fit_rd_young$se[3],fit_rd_old$se[3],fit_rd_uneduc$se[3],fit_rd_educ$se[3])
+
+order <- 7:1
+min30 <- betas30-1.96*se30
+max30 <- betas30+1.96*se30
+min60 <- betas60-1.96*se30
+max60 <- betas60+1.96*se30
+
+res_data <- data.frame(coefnames,betas30,betas60,min30,max30,order,min60,max60)
+
+ggplot(res_data, aes(y = betas30, ymin=min30, ymax=max30, x = reorder(coefnames,order))) + geom_pointrange() + coord_flip()+theme_bw()+scale_x_discrete("Effects")+scale_y_continuous("beta") + geom_hline(xintercept = 0, colour="red")
+
+ggplot(res_data, aes(y = betas60, ymin=min60, ymax=max60, x = reorder(coefnames,order))) + geom_pointrange() + coord_flip()+theme_bw()+scale_x_discrete("Effects")+scale_y_continuous("beta") + geom_hline(xintercept = 0, colour="red")
+
 ```
 
 ### DiD
 
-```{r did,eval=FALSE}
-# We need ordered logit regression here. Fixed effects can be achieved by including country-dummies.
-library(MASS)
-# including country dummies in polr() throws an error.. 
-summary(polr(nuclear~after*(sex+age), data=issp))
+Question: do we need ordered logit here because of potential compression effects (i.e. groups that had radical opinions BEFORE fukushima are not able to change there attitude. Image all women answered "very dangerous" before fukushima. then we can not observe an effect afterwards). 
 
-# using OLS temporarily
-# controlling for country trends
-fit<-lm(as.numeric(nuclear)~sex+age+after:sex+after:age+country+country:as.numeric(date), data=issp)
-summary(fit)
-library(survey)# contains regTermTest for F-test
-
-summary(lm(as.numeric(nuclear)~after*(sex+age)+country, data=issp))
-summary(lm(as.numeric(nuclear)~after*(sex+age+DEGREE)+country, data=issp))
-fit<-lm(as.numeric(nuclear)~after*(sex+age+DEGREE)+country, data=issp)
-# controlling for educational degree changes age-coefficient. so age effect seems to be an effect of education
-# i.e. higher educations tend to higher values (=not a big threat), at the same time, older people have lower education
-
-regTermTest(fit,"after:DEGREE") #no interaction with education
-#library(effects)
-#plot(effect("after*age",fit))
-```
-
-### Methodological issues
-
-Interaction effects might be "compressed", e.g. women have a lower base-line (more often answered "extremely dangerous") so there is less room for an effect. We can look whether ordered logit solves that issue by using simulated data.
+We can answer that with a simulation using plausible numbers (obtained from the later analyses)
 
 ```{r}
+library(MASS)
 woman <- rbinom(36342,1,0.5)
 # introduce an effect for sex (-0.33) and after (-0.21) but no interaction
 y_star <- woman*-0.33+rnorm(36342)
@@ -150,6 +210,68 @@ y <- ifelse(y_star<q20,1,ifelse(y_star<q40,2,ifelse(y_star<q60,3,ifelse(y_star<q
 summary(lm(y~woman*after))
 summary(polr(as.factor(y)~woman*after))
 
-# we see a bias if we use -2 for women (so there must be an extreme base line difference for this artefact to occure). ologit solves the problem!
+```
+
+We see a bias if we use -2 for women (so there must be an extreme base line difference for this artefact to occure). ologit solves the problem but there is no need to use it. For our FE model it is better to stick to metric assumptions.
+
+
+```{r did}
+# We need ordered logit regression here. Fixed effects can be achieved by including country-dummies.
+library(MASS)
+# including country dummies in polr() throws an error.. 
+#summary(polr(nuclear~after*(sex+age), data=issp))
+
+# using OLS vs ordered logit seems legit (see simulation)
+
+# Model without interactions to get the gross effect
+summary(lm(as.numeric(nuclear)~after+sex+age+DEGREE+trust+pol_trust+country+DATEMO*DATEYR, data=issp))
+# the overall effect is 0.15 on the 1-5 scale. 
+
+fit <- lm(as.numeric(nuclear)~after*(sex+age+DEGREE+trust+pol_trust)+country+DATEMO*DATEYR, data=issp)
+summary(fit)
+# controlling for country trends does not affect our results
+fit2<-lm(as.numeric(nuclear)~after*(sex+age+DEGREE+trust+pol_trust)+country+DATEMO*DATEYR+country:as.numeric(date), data=issp)
+summary(fit2)
+
+# only use countries that include both: before and after measure
+fit3<-lm(as.numeric(nuclear)~after*(sex+age+DEGREE+trust+pol_trust)+country+DATEMO*DATEYR+country:as.numeric(date), data=subset(issp,country%in%c("CH-Switzerland","SI-Slovenia","DK-Denmark","CA-Canada")))
+summary(fit3)
+
+
+library(survey)# contains regTermTest for F-test
+
+regTermTest(fit,"after:DEGREE") 
+regTermTest(fit2,"after:DEGREE")#no interaction with education
+
+# to present the results it is easier to show two interaction effects instead of main effect plus interaction:
+issp$before <- issp$after==FALSE
+fit_final<-lm(as.numeric(nuclear)~as.numeric(before):(as.numeric(sex)+age+DEGREE+trust+pol_trust)+as.numeric(after):(as.numeric(sex)+age+DEGREE+trust+pol_trust)+country+DATEMO*DATEYR+country:as.numeric(date), data=issp)
+# because of our strong assumptions (metric Y) we should use robust standard errors
+library(AER)
+results<-coeftest(fit_final, vcov=vcovHC(fit_final,type="HC0"))
+results
+
+```
+
+### Plotting the results
+
+We controlled for country levels, period dummies (monthly) and linear time trends within each country
+
+
+```{r airplane_plot}
+coefnames <- c("Female","Age (10y)","Lowest formal qualification","Intermediate secondary qualif.","Higher secondary","University incomplete","University","General Trust","Political Trust")
+maineffects <- results[c(41:49),1]
+interactions <- results[c(50:58),1]
+main_se <- results[c(41:49),2]
+int_se <- results[c(50:58),2]
+order <- 9:1
+main_min <- maineffects-1.96*main_se
+main_max <- maineffects+1.96*main_se
+int_min <- interactions-1.96*int_se
+int_max <- interactions+1.96*int_se
+
+res_data <- data.frame(coefnames,maineffects,interactions,main_se,int_se,order,main_min,main_max,int_min,int_max)
+
+ggplot(res_data, aes(y = maineffects, ymin=main_min, ymax=main_max, x = reorder(coefnames,order))) + geom_pointrange() + coord_flip()+theme_bw()+scale_x_discrete("Effects")+scale_y_continuous("beta") + geom_hline(xintercept = 0, colour="red") + geom_pointrange(aes(y=interactions,ymin=int_min,ymax=int_max,x=as.numeric(reorder(coefnames,order))-0.1),colour="#00AA00") + annotate("text", x = 5.3, y = 0.25, label = "Before", colour = "black", size=4) + annotate("text", x = 4.6, y = 0.242, label = "After", colour = "#00AA00", size=4)
 ```
 
