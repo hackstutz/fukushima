@@ -197,7 +197,13 @@ We can answer that with a simulation using plausible numbers (obtained from the 
 library(MASS)
 woman <- rbinom(36342,1,0.5)
 # introduce an effect for sex (-0.33) and after (-0.21) but no interaction
-y_star <- woman*-0.33+rnorm(36342)
+# also testet for the effects if nothing else is controlled for: sex=-0.348, after=-0.379
+#b_sex <- -0.33
+#b_after <- -0.21
+b_sex <- -0.348
+b_after <- -0.379
+
+y_star <- woman*b_sex+rnorm(36342)
 #retrieve cut-off-points
 q20<-quantile(y_star,0.2)
 q40<-quantile(y_star,0.4)
@@ -205,7 +211,7 @@ q60<-quantile(y_star,0.6)
 q80<-quantile(y_star,0.8)
 # introduce the fukushima effect
 after <- rbinom(36342,1,0.5)
-y_star <- y_star-0.21*after
+y_star <- y_star+b_after*after
 y <- ifelse(y_star<q20,1,ifelse(y_star<q40,2,ifelse(y_star<q60,3,ifelse(y_star<q80,4,5))))
 summary(lm(y~woman*after))
 summary(polr(as.factor(y)~woman*after))
