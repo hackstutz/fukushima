@@ -111,6 +111,10 @@ qplot(time,y,group=group, colour=group,ylim=c(0,50),xlim=c(0,1.06))+geom_line(si
 
 ```{r parametric}
 issp$t <- as.numeric(issp$date)-as.numeric(fukushima)
+# Exlude imputated Canadians:
+issp$valid <- TRUE
+issp$valid[issp$country=="CA-Canada"& issp$DATEMO=="March"] <- FALSE
+
 fit_rd_param<-lm(as.numeric(nuclear)~after*(sex+old+educated)*(t+I(t^2)+I(t^3)+I(t^4)+I(t^5)+I(t^6)), data=subset(issp,valid==TRUE))
 # interaction is significant for sex but not for old or educated
 rd_data <- model.frame(fit_rd_param)
@@ -127,9 +131,7 @@ library(rdd)
 #RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=issp)
 bw <- 86400*c(14,30,60,90) #86400 equals 1 day
 
-# Exlude imputated Canadians:
-issp$valid <- TRUE
-issp$valid[issp$country=="CA-Canada"& issp$DATEMO=="March"] <- FALSE
+
 
 fit_rd<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,valid==TRUE),bw=bw[2])
 
