@@ -63,6 +63,7 @@ issp$educated <- issp$DEGREE%in%c("University degree completed, BG: lower tertia
 #issp$income <- issp$
 issp$trust <- as.numeric(issp$V11)+as.numeric(issp$V12)
 issp$pol_trust <-5-as.numeric(issp$V13)
+issp$hhincome <- rowSums(as.numeric(issp[,which(names(issp)=="AT_INC"):which(names(issp)=="ZA_INC")]),na.rm=TRUE)
 ```
 
 It is important to know which countries contribute information to which period of time.
@@ -70,7 +71,7 @@ It is important to know which countries contribute information to which period o
 ```{r timelines}
 library(ggplot2)
 
-ggplot(issp, aes(x=date,y=V4))+geom_point()+geom_vline(xintercept=as.numeric(fukushima),color="red")
+ggplot(issp, aes(x=date,y=V4))+geom_point()+geom_vline(xintercept=as.numeric(fukushima),color="gray")+theme_bw()
 ```
 
 ## Method
@@ -232,10 +233,10 @@ library(MASS)
 # using OLS vs ordered logit seems legit (see simulation)
 
 # Model without interactions to get the gross effect
-summary(lm(as.numeric(nuclear)~after+sex+age+DEGREE+trust+pol_trust+country+DATEMO*DATEYR, data=issp))
+summary(lm(as.numeric(nuclear)~after+sex+age+DEGREE+trust+pol_trust+as.numeric(TOPBOT)+country+DATEMO*DATEYR, data=issp))
 # the overall effect is 0.15 on the 1-5 scale. 
 
-fit <- lm(as.numeric(nuclear)~after*(sex+age+DEGREE+trust+pol_trust)+country+DATEMO*DATEYR, data=issp)
+fit <- lm(as.numeric(nuclear)~after*(sex+age+DEGREE+trust+pol_trust+as.numeric(TOPBOT))+country+DATEMO*DATEYR, data=issp)
 summary(fit)
 # controlling for country trends does not affect our results
 fit2<-lm(as.numeric(nuclear)~after*(sex+age+DEGREE+trust+pol_trust)+country+DATEMO*DATEYR+country:as.numeric(date), data=issp)
