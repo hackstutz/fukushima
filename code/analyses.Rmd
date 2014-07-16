@@ -2,7 +2,14 @@
 
 ```{r sweaveopts}
 library(knitr)
-opts_chunk$set(comment=NA, fig.width=8, fig.height=6)
+opts_chunk$set(comment=NA, fig.width=8, fig.height=6,cache=FALSE,self.contained=FALSE)
+```
+
+```{r}
+library(rdd)
+library(ggplot2)
+library(foreign)
+library(AER)
 ```
 
 
@@ -12,8 +19,8 @@ We use the International Social Survey Program (ISSP) data 2010 which added an e
 
 ```{r dataimport}
 library(foreign)
-setwd("C:/Users/Hackstutz/Dropbox/Fukushima/")
-setwd("C:/Users/rudi/Dropbox/Fukushima/")
+try(setwd("C:/Users/Hackstutz/Dropbox/Fukushima/"))
+try(setwd("C:/Users/rudi/Dropbox/Fukushima/"))
 issp <- read.dta("issp_data/ZA5500_v2-0-0.dta")
 ```
 
@@ -59,11 +66,17 @@ issp$country <- issp$V4
 issp$sex <- factor(issp$SEX)
 issp$age <- issp$AGE/10
 issp$old <- issp$age>4.7
+# calculate standardized household income by country
+issp$hhincome <- NA
+for(i in which(names(issp)=="AT_INC"):which(names(issp)=="ZA_INC")) {
+  issp$hhincome[!is.na(issp[,i])] <- scale(as.numeric(issp[!is.na(issp[,i]),i]))
+}
+
+issp$welloff <- issp$hhincome > 0
 issp$educated <- issp$DEGREE%in%c("University degree completed, BG: lower tertiary level, upper tertiary level","University degree incomplete (qualifications above higher secondary level)","Higher secondary completed (usual entry requirements for universities)")
-#issp$income <- issp$
-issp$trust <- as.numeric(issp$V11)+as.numeric(issp$V12)
+issp$trust <- (as.numeric(issp$V11)+as.numeric(issp$V12))/2
 issp$pol_trust <-5-as.numeric(issp$V13)
-issp$hhincome <- rowSums(as.numeric(issp[,which(names(issp)=="AT_INC"):which(names(issp)=="ZA_INC")]),na.rm=TRUE)
+
 ```
 
 It is important to know which countries contribute information to which period of time.
@@ -126,7 +139,7 @@ ggplot(rd_data, aes(y=pred,x=t))+geom_point()+facet_wrap(~educated)
 ```
 
 
-```{r rdd,eval=FALSE}
+```{r rdd}
 library(rdd)
 # Efficiency gains can be made by including covariates. I.e. country dummies. Austin Nicols stronly discourages that.
 #RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=issp)
@@ -159,24 +172,35 @@ title("Effect for young people")
 plot(fit_rd_old)
 title("Effect for old people (>47y)")
 
+
+# Split by income (above/below median) 
+fit_rd_welloff<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,welloff==TRUE&valid==TRUE),bw=bw[2])
+fit_rd_notwell<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,welloff==FALSE&valid==TRUE),bw=bw[2])
+
+par(mfrow=c(1,2))
+plot(fit_rd_welloff)
+title("hh income above median")
+plot(fit_rd_notwell)
+title("hh income below median")
+
 # Split by education (qualified to enter university and higher)
 fit_rd_uneduc<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,educated==FALSE&valid==TRUE),bw=bw[2])
 fit_rd_educ<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,educated==TRUE&valid==TRUE),bw=bw[2])
 
 par(mfrow=c(1,2))
-plot(fit_rd_uneduc)
+plot(fit_rd_uneduc,ylim=c(3,5))
 title("Effect for less educated")
-plot(fit_rd_educ)
+plot(fit_rd_educ,ylim=c(3,5))
 title("Effect for more educated")
 
 # Table with all effects
-betas30 <- c(fit_rd$est[1], fit_rd_male$est[1],fit_rd_female$est[1],fit_rd_young$est[1],fit_rd_old$est[1],fit_rd_uneduc$est[1],fit_rd_educ$est[1])
-betas60 <- c(fit_rd$est[3], fit_rd_male$est[3],fit_rd_female$est[3],fit_rd_young$est[3],fit_rd_old$est[3],fit_rd_uneduc$est[3],fit_rd_educ$est[3])
-coefnames <- c("Overall", "Males","Females","Young","Old","Less educated","More educated")
-se30 <-  c(fit_rd$se[1], fit_rd_male$se[1],fit_rd_female$se[1],fit_rd_young$se[1],fit_rd_old$se[1],fit_rd_uneduc$se[1],fit_rd_educ$se[1])
-se60 <-  c(fit_rd$se[3], fit_rd_male$se[3],fit_rd_female$se[3],fit_rd_young$se[3],fit_rd_old$se[3],fit_rd_uneduc$se[3],fit_rd_educ$se[3])
+betas30 <- c(fit_rd$est[1], fit_rd_male$est[1],fit_rd_female$est[1],fit_rd_young$est[1],fit_rd_old$est[1],fit_rd_uneduc$est[1],fit_rd_educ$est[1],fit_rd_welloff$est[1],fit_rd_notwell$est[1])
+betas60 <- c(fit_rd$est[3], fit_rd_male$est[3],fit_rd_female$est[3],fit_rd_young$est[3],fit_rd_old$est[3],fit_rd_uneduc$est[3],fit_rd_educ$est[3],fit_rd_welloff$est[3],fit_rd_notwell$est[3])
+coefnames <- c("Overall", "Males","Females","Young","Old","Less educated","More educated", "Above median household income","Below median household income")
+se30 <-  c(fit_rd$se[1], fit_rd_male$se[1],fit_rd_female$se[1],fit_rd_young$se[1],fit_rd_old$se[1],fit_rd_uneduc$se[1],fit_rd_educ$se[1],fit_rd_welloff$se[1],fit_rd_notwell$se[1])
+se60 <-  c(fit_rd$se[3], fit_rd_male$se[3],fit_rd_female$se[3],fit_rd_young$se[3],fit_rd_old$se[3],fit_rd_uneduc$se[3],fit_rd_educ$se[3],fit_rd_welloff$se[3],fit_rd_notwell$se[3])
 
-order <- 7:1
+order <- 9:1
 min30 <- betas30-1.96*se30
 max30 <- betas30+1.96*se30
 min60 <- betas60-1.96*se30
@@ -246,6 +270,8 @@ summary(fit2)
 fit3<-lm(as.numeric(nuclear)~after*(sex+age+DEGREE+trust+pol_trust)+country+DATEMO*DATEYR+country:as.numeric(date), data=subset(issp,country%in%c("CH-Switzerland","SI-Slovenia","DK-Denmark","CA-Canada")))
 summary(fit3)
 
+# test social desirability
+summary(lm(as.numeric(nuclear)~as.numeric(after)*MODE+country+DATEMO*DATEYR+country:as.numeric(date), data=issp))
 
 library(survey)# contains regTermTest for F-test
 
@@ -254,9 +280,37 @@ regTermTest(fit2,"after:DEGREE")#no interaction with education
 
 # to present the results it is easier to show two interaction effects instead of main effect plus interaction:
 issp$before <- issp$after==FALSE
-fit_final<-lm(as.numeric(nuclear)~as.numeric(before):(as.numeric(sex)+age+DEGREE+trust+pol_trust)+as.numeric(after):(as.numeric(sex)+age+DEGREE+trust+pol_trust)+country+DATEMO*DATEYR+country:as.numeric(date), data=issp)
-# because of our strong assumptions (metric Y) we should use robust standard errors
+fit_final<-lm(as.numeric(nuclear)~as.numeric(before):(as.numeric(sex)+age+DEGREE+trust+pol_trust+hhincome)+as.numeric(after):(as.numeric(sex)+age+DEGREE+trust+pol_trust+hhincome)+country+DATEMO*DATEYR+country:as.numeric(date), data=issp)
+
+# test interactions
 library(AER)
+coeftest(lm(as.numeric(nuclear)~as.numeric(after)*(as.numeric(sex)+age+DEGREE+trust+pol_trust+hhincome)+country+DATEMO*DATEYR+country:as.numeric(date), data=issp))[1:2,]
+
+#test endogeneity of trust
+bw <- 86400*c(14,30,60,90) #86400 equals 1 day
+fit_rd_trust<-RDestimate(as.numeric(trust)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,valid==TRUE),bw=bw[2])
+fit_rd_poltrust<-RDestimate(as.numeric(pol_trust)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,valid==TRUE),bw=bw[2])
+par(mfrow=c(1,2))
+plot(fit_rd_trust)
+title("Impact on Trust")
+plot(fit_rd_poltrust)
+title("political Trust")
+
+
+
+# robustness check: shifting 10 days left and right
+fit_rd_left<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima-10*3600*24),data=subset(issp,valid==TRUE),bw=bw[2])
+fit_rd_right<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima+10*3600*24),data=subset(issp,valid==TRUE),bw=bw[2])
+fit_rd<-RDestimate(as.numeric(nuclear)~as.numeric(date), cutpoint=as.numeric(fukushima),data=subset(issp,valid==TRUE),bw=bw[2])
+par(mfrow=c(1,3))
+plot(fit_rd_left)
+title("-10 days")
+plot(fit_rd)
+title("March 13th")
+plot(fit_rd_right)
+title("+10 days")
+
+# because of our strong assumptions (metric Y) we should use robust standard errors
 results<-coeftest(fit_final, vcov=vcovHC(fit_final,type="HC0"))
 results
 
@@ -268,12 +322,12 @@ We controlled for country levels, period dummies (monthly) and linear time trend
 
 
 ```{r airplane_plot}
-coefnames <- c("Female","Age (10y)","Lowest formal qualification","Intermediate secondary qualif.","Higher secondary","University incomplete","University","General Trust","Political Trust")
-maineffects <- results[c(41:49),1]
-interactions <- results[c(50:58),1]
-main_se <- results[c(41:49),2]
-int_se <- results[c(50:58),2]
-order <- 9:1
+coefnames <- c("Female","Age (10y)","Lowest formal qualification","Intermediate secondary qualif.","Higher secondary","University incomplete","University","General Trust","Political Trust", "Household income")
+maineffects <- results[c(40:49),1]
+interactions <- results[c(50:59),1]
+main_se <- results[c(40:49),2]
+int_se <- results[c(50:59),2]
+order <- 10:1
 main_min <- maineffects-1.96*main_se
 main_max <- maineffects+1.96*main_se
 int_min <- interactions-1.96*int_se
